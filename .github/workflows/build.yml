@@ -14,57 +14,37 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Advanced Linux SDK & Android Compiler Dependencies
+      - name: Install System Utilities
         run: |
-          # Broken pipe လုံးဝမဖြစ်စေရန် Native C/C++ Libraries များနှင့် Compiler Tools များကို ကြိုတင်အပြည့်အစုံသွင်းခြင်း
           sudo apt update
-          sudo apt install -y curl git unzip xz-utils zip libglu1-mesa openjdk-17-jdk autoconf libtool pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake libffi-dev
+          sudo apt install -y curl git unzip xz-utils zip libglu1-mesa openjdk-17-jdk
 
-      - name: Setup Flutter SDK
+      - name: Setup Flutter Engine
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
 
-      - name: Pre-Accept Android SDK Licenses
+      - name: Accept Android Licenses
         run: |
-          # လိုင်စင်ပိတ်မိပြီး ပျက်ကျခြင်းမရှိစေရန် ကြိုတင်အတည်ပြုခြင်း
           yes | flutter doctor --android-licenses || true
 
-      - name: Install Flet & Required Python Packages
+      - name: Production Environment Pip Setup
         run: |
           python -m pip install --upgrade pip
-          pip install flet aiohttp requests charset-normalizer idna urllib3 certifi cryptography
+          pip install flet
 
-      - name: Smart Verify and Pack Flet Structure
+      - name: Compiling and Assembly Production APK
         run: |
-          if [ ! -f "main.py" ]; then
-            echo "Error: ပင်မမျက်နှာစာ main.py ဖိုင်အား ရှာမတွေ့ပါ။"
-            exit 1
-          fi
-          
-          # Flet Workspace သီးသန့်တည်ဆောက်ခြင်း
+          # သန့်စင်သော Workspace တည်ဆောက်ခြင်း
           mkdir -p src
           cp main.py src/main.py
           
-          # ModuleNotFoundError လုံးဝမတက်စေရန် လိုအပ်မည့် Dependencies အားလုံး ထည့်သွင်းခြင်း
-          cat <<EOF > src/requirements.txt
-          flet
-          aiohttp
-          requests
-          charset-normalizer
-          idna
-          urllib3
-          certifi
-          cryptography
-          EOF
-          
-          # ဗားရှင်းမကိုက်ညီမှုကြောင့် Error မတက်စေရန် အပို argument များအားလုံး ဖြုတ်ချပြီး Safe Mode ဖြင့် build ခြင်း
-          yes | flet build apk src
+          # Android Runtime တွင် ပျက်ကျမှုမရှိစေရန် အခွံသစ်ဖြင့် စနစ်တကျ Build ခြင်း
+          flet build apk src --no-interactive
 
-      - name: Upload Finished Android APK
+      - name: Export Verified Distribution APK
         uses: actions/upload-artifact@v4
         with:
           name: Ruijie-Bypass-APK
-          # Zip ဖြည်လိုက်လျှင် Folder မရှုပ်ဘဲ .apk သီးသန့်တန်းထွက်လာစေမည့် လမ်းကြောင်း
           path: src/build/apk/*.apk
