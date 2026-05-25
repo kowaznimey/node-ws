@@ -244,4 +244,5 @@ def main(page: ft.Page):
     )
 
 if __name__ == "__main__":
-    ft.run(main, view=ft.AppView.WEB_BROWSER, port=8585)
+    # Android Client အတွက် တရားဝင် Native App UI Mode သို့ ပြောင်းလဲခြင်း
+    ft.run(main)
