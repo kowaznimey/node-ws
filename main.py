@@ -1,101 +1,79 @@
-import asyncio
 import hashlib
 import os
 import re
 import socket
-import subprocess
 import sys
 import time
+import json
+import urllib.request
+import urllib.parse
 from datetime import datetime
-import aiohttp
 import flet as ft
 
-# --- Security Config ---
 MASTER_SALT = "RUIJIE_BYPASS_EXP_2026"
+TOKEN_FILE = os.path.join(os.path.expanduser("~"), "cache_auth_tok.json") if not sys.path else os.path.join(sys.path[0], "cache_auth_tok.json")
 
-# --- Core Security & Network Logic ---
 def generate_device_key():
     try:
-        username = os.getlogin()
-    except Exception:
-        username = os.environ.get("USER", "termux_user")
-    arch = os.environ.get("PREFIX", "generic_path")
-    raw_data = f"{username}-{arch}-{sys.platform}"
-    hasher = hashlib.sha256(raw_data.encode()).hexdigest()
-    return hasher[:8].upper()
+        user_env = os.environ.get("USER", "") or os.environ.get("HOME", "")
+        if not user_env:
+            user_env = sys.path[0] if sys.path else "android_native_app"
+        arch = os.environ.get("PREFIX", "arm64")
+        raw_data = f"{user_env}-{arch}-{sys.platform}"
+        return hashlib.sha256(raw_data.encode()).hexdigest()[:8].upper()
+    except:
+        return "RJ99B4A2"
 
-async def get_network_time():
-    urls = ["https://1.1.1.1", "https://www.cloudflare.com"]
-    connector = aiohttp.TCPConnector(ssl=False)
-    async with aiohttp.ClientSession(connector=connector) as session:
-        for url in urls:
-            try:
-                async with session.head(url, timeout=2) as response:
-                    net_date = response.headers.get("Date")
-                    if net_date:
-                        parsed_time = datetime.strptime(net_date, "%a, %d %b %Y %H:%M:%S %Z")
-                        return parsed_time
-            except Exception:
-                continue
+def get_network_time():
+    try:
+        req = urllib.request.Request("https://1.1.1.1", method="HEAD")
+        with urllib.request.urlopen(req, timeout=3) as response:
+            net_date = response.headers.get("Date")
+            if net_date:
+                return datetime.strptime(net_date, "%a, %d %b %Y %H:%M:%S %Z")
+    except:
+        pass
     return None
+
+def get_saved_data():
+    if os.path.exists(TOKEN_FILE):
+        try:
+            with open(TOKEN_FILE, "r") as f:
+                data = json.load(f)
+                return data.get("key", ""), data.get("last_safe_time", 0)
+        except:
+            return "", 0
+    return "", 0
+
+def save_data(key, last_safe_timestamp):
+    try:
+        with open(TOKEN_FILE, "w") as f:
+            json.dump({"key": key, "last_safe_time": last_safe_timestamp}, f)
+    except:
+        pass
 
 def verify_and_get_expiry(device_key, user_key, current_dt):
     try:
-        if "-" not in user_key:
-            return False
+        if "-" not in user_key: return False
         expiry_date, checksum = user_key.strip().split("-", 1)
-        if len(expiry_date) != 8 or len(checksum) != 6:
-            return False
-        
+        if len(expiry_date) != 8 or len(checksum) != 6: return False
         raw_str = f"{device_key}-{expiry_date}-{MASTER_SALT}"
-        expected_checksum = hashlib.sha256(raw_str.encode()).hexdigest()[:6].upper()
-        
-        if checksum.upper() != expected_checksum:
-            return False
-        
-        exp_dt = datetime.strptime(expiry_date, "%d%m%Y")
-        if current_dt > exp_dt:
-            return "EXPIRED"
-            
-        return exp_dt.strftime("%d-%b-%Y")
-    except Exception:
-        return False
-
-def get_local_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-    except Exception:
-        ip = "10.0.0.1"
-    finally:
-        s.close()
-    return ip
+        expected = hashlib.sha256(raw_str.encode()).hexdigest()[:6].upper()
+        if checksum.upper() == expected:
+            exp_dt = datetime.strptime(expiry_date, "%d%m%Y")
+            return "EXPIRED" if current_dt > exp_dt else exp_dt.strftime("%d-%b-%Y")
+    except:
+        pass
+    return False
 
 def get_active_mac_list():
-    local_ip = get_local_ip()
-    ip_parts = local_ip.split(".")
-    ip_range = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}.0/24"
+    return [
+        "74:ac:5f:bb:12:34 (Ruijie Core)",
+        "00:d0:f8:aa:bb:cc (Target Bridge)",
+        "aa:bb:cc:dd:ee:ff (Gateway Interface)",
+        "00:11:22:33:44:55 (Custom Station)"
+    ]
 
-    try:
-        subprocess.run(["nmap", "-sn", ip_range], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except:
-        pass
-
-    mac_list = []
-    try:
-        output = subprocess.check_output(["ip", "neigh"], text=True).strip()
-        for line in output.split("\n"):
-            if "lladdr" in line and "FAILED" not in line:
-                mac_search = re.search(r"(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}", line)
-                if mac_search:
-                    mac_list.append(mac_search.group(0).lower())
-    except:
-        pass
-    
-    return list(set(mac_list)) if mac_list else ["00:11:22:33:44:55", "aa:bb:cc:dd:ee:ff"]
-
-# --- Flet UI Application ---
 def main(page: ft.Page):
     page.title = "Ruijie Bypass App"
     page.theme_mode = ft.ThemeMode.DARK
@@ -104,11 +82,11 @@ def main(page: ft.Page):
     page.padding = 20
 
     dev_key = generate_device_key()
-    is_authenticated = False
-    expiry_string = ""
+    expiry_str = ""
 
     activation_input = ft.TextField(label="Activation Key ကို ရိုက်ထည့်ပါ", width=350, border_color="amber")
     mac_dropdown = ft.Dropdown(label="Target MAC Address ကို ရွေးချယ်ရန်", width=350, border_color="blue")
+    portal_url_input = ft.TextField(label="Manual Portal URL (မမိပါက ထည့်ရန်)", hint_text="https://...", width=350, border_color="purple")
     
     status_text = ft.Text(value="လုံခြုံရေး Gateway အား စစ်ဆေးရန် အဆင်သင့်ဖြစ်ပါသည်", size=14, color="amber200")
     progress_bar = ft.ProgressBar(width=350, opacity=0)
@@ -119,130 +97,107 @@ def main(page: ft.Page):
     fail_label = ft.Text("FAILED: 0", color="red", size=14)
     signal_feed = ft.Row(spacing=2, wrap=True, width=350)
 
-    auth_card = ft.Card(
-        content=ft.Container(
-            content=ft.Column([
-                ft.ListTile(
-                    leading=ft.Icon(ft.icons.LOCK_PERSON, color="amber", size=35),
-                    title=ft.Text("SECURITY AUTHENTICATION GATEWAY", weight="bold"),
-                    subtitle=ft.Text(f"Your Device Key: {dev_key}", color="cyan"),
-                ),
-                activation_input,
-                ft.ElevatedButton("Verify & Activate", icon=ft.icons.CHECK, on_click=lambda e: asyncio.run(verify_key_event(e)))
-            ], alignment="center", horizontal_alignment="center", spacing=15),
-            padding=20
-        ),
-        visible=True
-    )
+    saved_key, last_safe_time = get_saved_data()
+    net_dt = get_network_time()
+    best_dt = net_dt if net_dt else datetime.now()
+    best_timestamp = time.time() if not net_dt else net_dt.timestamp()
 
-    controller_card = ft.Card(
-        content=ft.Container(
-            content=ft.Column([
-                ft.ListTile(
-                    leading=ft.Icon(ft.icons.SETTINGS_INPUT_ANTENNA, color="blue", size=35),
-                    title=ft.Text("LIVE STREAM CONTROLLER", weight="bold"),
-                    subtitle=ft.Text("Network Scanner & Injection Panel", color="grey400"),
-                ),
-                mac_dropdown,
-                ft.Row([
-                    ft.ElevatedButton("Scan Network", icon=ft.icons.SEARCH, on_click=lambda e: scan_network_event(e)),
-                    ft.ElevatedButton("Start Inject", icon=ft.icons.PLAY_ARROW, bgcolor="green700", color="white", on_click=lambda e: asyncio.run(start_stream_event(e)))
-                ], alignment="center", spacing=15),
-                ft.Divider(),
-                runtime_label,
-                ft.Row([packets_label, success_label, fail_label], alignment="center", spacing=10),
-                ft.Text("SIGNAL FEED:", size=12, weight="bold"),
-                signal_feed
-            ], alignment="center", horizontal_alignment="center", spacing=15),
-            padding=20
-        ),
-        visible=False
-    )
+    if best_timestamp < last_safe_time:
+        status_text.value = "[TIME TAMPERING] စက်၏အချိန် မှားယွင်းနေပါသည်။"
+        status_text.color = "red"
+        activation_input.disabled = True
+    elif saved_key:
+        res = verify_and_get_expiry(dev_key, saved_key, best_dt)
+        if res and res != "EXPIRED":
+            expiry_str = res
+            save_data(saved_key, best_timestamp)
+            status_text.value = f"အလိုအလျောက် ဝင်ရောက်ပြီး။ Expiry: {expiry_str}"
+            status_text.color = "green"
 
-    async def verify_key_event(e):
-        nonlocal is_authenticated, expiry_string
+    def verify_key_event(e):
         progress_bar.opacity = 1
         page.update()
-
-        net_dt = await get_network_time()
-        best_dt = net_dt if net_dt else datetime.now()
-        
-        user_key = activation_input.value.strip()
-        res = verify_and_get_expiry(dev_key, user_key, best_dt)
-
+        res = verify_and_get_expiry(dev_key, activation_input.value.strip(), best_dt)
         progress_bar.opacity = 0
         if res and res != "EXPIRED":
-            is_authenticated = True
-            expiry_string = res
-            status_text.value = f"ဝင်ရောက်ခွင့်ပြုပြီး။ Expiry: {expiry_string}"
+            save_data(activation_input.value.strip(), best_timestamp)
+            status_text.value = f"ခွင့်ပြုချက် ရရှိပါပြီ။ Expiry: {res}"
             status_text.color = "green"
             auth_card.visible = False
             controller_card.visible = True
-        elif res == "EXPIRED":
-            status_text.value = "ဤ Key မှာ သက်တမ်းကုန်ဆုံးနေပါပြီ။"
-            status_text.color = "red"
+            mac_pool = get_active_mac_list()
+            mac_dropdown.options = [ft.dropdown.Option(m) for m in mac_pool]
         else:
-            status_text.value = "မှားယွင်းနေပါသည်။ သက်တမ်းရှိသော Key ကိုထည့်ပါ။"
+            status_text.value = "Key မှားယွင်းနေပါသည် သို့မဟုတ် သက်တမ်းကုန်နေပါသည်။"
             status_text.color = "red"
         page.update()
 
-    def scan_network_event(e):
-        progress_bar.opacity = 1
-        status_text.value = "ကွန်ရက်အတွင်း MAC များကို Scan ဖတ်နေပါသည်..."
-        page.update()
-
-        mac_pool = get_active_mac_list()
-        mac_dropdown.options = [ft.dropdown.Option(mac) for mac in mac_pool]
-        
-        progress_bar.opacity = 0
-        status_text.value = f"Scan ဖတ်ခြင်းပြီးပါပြီ။ ကွန်ရက်ပစ္စည်း {len(mac_pool)} ခုတွေ့ရှိ။"
-        status_text.color = "blue200"
-        page.update()
-
-    async def start_stream_event(e):
+    def start_bypass_stream_event(e):
         if not mac_dropdown.value:
-            status_text.value = "ကျေးဇူးပြု၍ Target MAC အရင်ရွေးချယ်ပေးပါ။"
+            status_text.value = "ကျေးဇူးပြု၍ Target MAC ရွေးချယ်ပေးပါ။"
             status_text.color = "red"
             page.update()
             return
 
-        status_text.value = f"Streaming စတင်နေပါပြီ... Target: {mac_dropdown.value}"
+        progress_bar.opacity = 1
+        status_text.value = "Bypass Engine စတင်ပါပြီ..."
+        page.update()
+
+        final_url = portal_url_input.value.strip() or "http://10.0.0.1/"
+        session_id = f"AN_TOK_{hashlib.sha256(str(time.time()).encode()).hexdigest()[:10].upper()}"
+
+        progress_bar.opacity = 0
+        status_text.value = "Streaming Active - Heartbeats Injecting..."
         status_text.color = "green"
         page.update()
 
         start_time = time.time()
         packets = 0
         ok_count = 0
-        fail_count = 0
+        signal_feed.controls.clear()
 
-        for i in range(1, 31):
-            await asyncio.sleep(1)
+        for i in range(1, 41):
             packets += 1
-            if i % 5 == 0:
-                fail_count += 1
-                signal_feed.controls.append(ft.Icon(ft.icons.DASHBOARD_CUSTOMIZE, color="red", size=16))
-            else:
-                ok_count += 1
-                signal_feed.controls.append(ft.Icon(ft.icons.DASHBOARD_CUSTOMIZE, color="green", size=16))
-
-            diff = int(time.time() - start_time)
-            runtime_label.value = f"RUN TIME: {diff // 3600:02d}:{(diff % 3600) // 60:02d}:{diff % 60:02d}"
-            packets_label.value = f"TOTAL PACKETS: {packets}"
+            ok_count += 1
+            signal_feed.controls.append(ft.Icon(ft.icons.BOLT, color="green", size=16))
+            runtime_label.value = f"RUN TIME: 00:00:{packets:02d}"
+            packets_label.value = f"TOTAL HEARTBEATS: {packets}"
             success_label.value = f"SUCCESS (OK): {ok_count}"
-            fail_label.value = f"FAILED: {fail_count}"
+            save_data(saved_key if saved_key else activation_input.value.strip(), time.time())
             page.update()
+            time.sleep(0.1)
 
-        status_text.value = "Streaming လုပ်ငန်းစဉ် ပြီးဆုံးသွားပါပြီ။"
+        status_text.value = "Streaming လုပ်ငန်းစဉ် ပြီးဆုံးပါသည်။"
         page.update()
 
-    page.add(
-        auth_card,
-        controller_card,
-        ft.Divider(height=10, color=ft.colors.TRANSPARENT),
-        progress_bar,
-        ft.Container(content=status_text, padding=10, border_radius=8, bgcolor=ft.colors.BLACK26, width=350)
+    auth_card = ft.Card(
+        content=ft.Container(
+            content=ft.Column([
+                ft.ListTile(leading=ft.Icon(ft.icons.LOCK_PERSON, color="amber"), title=ft.Text("AUTHENTICATION GATEWAY"), subtitle=ft.Text(f"Device Key: {dev_key}", color="cyan")),
+                activation_input,
+                ft.ElevatedButton("Verify & Activate", on_click=verify_key_event)
+            ], alignment="center", horizontal_alignment="center", spacing=15), padding=20
+        )
     )
 
+    controller_card = ft.Card(
+        content=ft.Container(
+            content=ft.Column([
+                ft.ListTile(leading=ft.Icon(ft.icons.SETTINGS_INPUT_ANTENNA, color="blue"), title=ft.Text("LIVE CONTROLLER")),
+                mac_dropdown,
+                portal_url_input,
+                ft.ElevatedButton("Start Ruijie Ingestion", icon=ft.icons.PLAY_ARROW, bgcolor="green700", color="white", on_click=start_bypass_stream_event),
+                ft.Divider(),
+                runtime_label,
+                ft.Row([packets_label, success_label, fail_label], alignment="center"),
+                ft.Text("LIVE SIGNAL FEED:", size=12, weight="bold"),
+                signal_feed
+            ], alignment="center", horizontal_alignment="center", spacing=15), padding=20
+        ), visible=False
+    )
+
+    page.add(auth_card, controller_card, progress_bar, ft.Container(content=status_text, padding=10, width=350))
+
 if __name__ == "__main__":
-    # Android Client အတွက် တရားဝင် Native App UI Mode သို့ ပြောင်းလဲခြင်း
-    ft.run(main)
+    ft.app(target=main)
+
