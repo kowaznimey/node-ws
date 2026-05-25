@@ -24,16 +24,30 @@ jobs:
         with:
           channel: 'stable'
 
+      - name: Accept Android Licenses
+        run: |
+          # ပိတ်မိနေတတ်သော Android SDK Licenses များအားလုံးကို ကြိုတင်၍ အလိုအလျောက် Accept လုပ်ခြင်း
+          yes | flutter doctor --android-licenses || true
+
       - name: Install Flet and Packages
         run: |
           pip install --upgrade pip
           pip install flet aiohttp requests charset-normalizer idna urllib3
 
-      - name: Build Android APK using Flet
+      - name: Fix Filename and Build APK
         run: |
-          # SDK ဒေါင်းလုဒ်လုပ်ရန် တောင်းဆိုချက်များကို 'yes |' သုံး၍ အလိုအလျောက် အတည်ပြုကျော်ဖြတ်ခြင်း
+          # ကစားသမားမှ main.py အား စာလုံးကြီးဖြင့် သိမ်းထားမိပါက သို့မဟုတ် နာမည်လွဲနေပါက Auto ပြင်ဆင်ရန်
+          if [ -f "Main.py" ]; then mv Main.py main.py; fi
+          if [ -f "apk" ]; then mv apk main.py; fi
+          
+          # သေချာစေရန် main.py ရှိမရှိ ထပ်မံစစ်ဆေးပြီး စတင် Build ခြင်း
+          if [ ! -f "main.py" ]; then
+            echo "Error: Python code file မတွေ့ရှိပါ။ ကျေးဇူးပြု၍ သင့်ဖိုင်အား main.py ဟု နာမည်ပေးထားပါ။"
+            exit 1
+          fi
+          
           yes | flet build apk main.py
-
+          
       - name: Upload Finished APK
         uses: actions/upload-artifact@v4
         with:
