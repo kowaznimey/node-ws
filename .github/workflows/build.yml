@@ -1,6 +1,6 @@
 name: Build Flet Android APK
 on:
-  workflow_dispatch: # ခလုတ်နှိပ်၍ အလိုအလျောက် မောင်းနှင်မည့်စနစ်
+  workflow_dispatch:
 
 jobs:
   build:
@@ -23,11 +23,10 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          cache: true # ဒေါင်းလုဒ်မြန်ဆန်စေရန် Cache စနစ်ကို ဖွင့်ထားခြင်း
+          cache: true
 
       - name: Pre-Accept Android SDK Licenses
         run: |
-          # Android SDK နှင့် ပတ်သက်သော လိုင်စင်များအားလုံးကို စက်ရုပ်စနစ်ဖြင့် ကြိုတင် အတည်ပြုခြင်း
           yes | flutter doctor --android-licenses || true
 
       - name: Install Flet & Required Python Packages
@@ -37,23 +36,20 @@ jobs:
 
       - name: Verify and Pack Flet App Structure
         run: |
-          # ၁။ သင့်ထံတွင် main.py အမှန်တကယ် ရှိမရှိ အရင်ဆုံး သေချာစွာ စစ်ဆေးခြင်း
           if [ ! -f "main.py" ]; then
             echo "Error: ပင်မမျက်နှာစာ main.py ဖိုင်အား ရှာမတွေ့ပါ။"
             exit 1
           fi
           
-          # ၂။ Flet မျှော်လင့်ထားသည့် လုပ်ငန်းခွင် Workspace သို့ ဖိုင်များ ပို့ဆောင်ခြင်း
+          # Flet Workspace တည်ဆောက်ခြင်း
           mkdir -p src
           cp main.py src/main.py
           
-          # ၃။ Flet တရားဝင် CLI စနစ်အား သုံး၍ လက်ရှိ Folder အား Target ထားကာ ဆောက်လုပ်ခြင်း
-          # --no-interactive နှင့် yes | အား ပေါင်းစပ်၍ အလိုအလျောက် ဒေါင်းလုဒ်စနစ်အား အသက်သွင်းထားသည်
-          yes | flet build apk src --no-interactive
+          # Error တက်စေသော --no-interactive အား ဖြုတ်ချပြီး အရှင်းဆုံးပုံစံဖြင့် build ခြင်း
+          yes | flet build apk src
 
       - name: Upload Finished Android APK
         uses: actions/upload-artifact@v4
         with:
           name: Ruijie-Bypass-APK
-          # Flet ၏ တရားဝင် ထွက်ရှိလာမည့် Native Output လမ်းကြောင်း ဖြစ်သည်
           path: build/apk/*.apk
