@@ -1,6 +1,6 @@
 name: Build Flet Android APK
 on:
-  workflow_dispatch:
+  workflow_dispatch: # ခလုတ်နှိပ်၍ အလိုအလျောက် မောင်းနှင်မည့်စနစ်
 
 jobs:
   build:
@@ -14,39 +14,46 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Flutter & Android SDK dependencies
+      - name: Install Linux SDK & Android Dependencies
         run: |
           sudo apt update
           sudo apt install -y curl git unzip xz-utils zip libglu1-mesa openjdk-17-jdk
-          
-      - name: Setup Flutter
+
+      - name: Setup Flutter SDK
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true # ဒေါင်းလုဒ်မြန်ဆန်စေရန် Cache စနစ်ကို ဖွင့်ထားခြင်း
 
-      - name: Accept Android Licenses
+      - name: Pre-Accept Android SDK Licenses
         run: |
+          # Android SDK နှင့် ပတ်သက်သော လိုင်စင်များအားလုံးကို စက်ရုပ်စနစ်ဖြင့် ကြိုတင် အတည်ပြုခြင်း
           yes | flutter doctor --android-licenses || true
 
-      - name: Install Flet and Packages
+      - name: Install Flet & Required Python Packages
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install flet aiohttp requests charset-normalizer idna urllib3
 
-      - name: Init Flet App Structure and Build APK
+      - name: Verify and Pack Flet App Structure
         run: |
-          # ၁။ Flet စနစ် မျှော်လင့်ထားသည့် လုပ်ငန်းခွင် ပတ်ဝန်းကျင်တစ်ခုအား တည်ဆောက်ခြင်း
-          mkdir -p flet_app_build
+          # ၁။ သင့်ထံတွင် main.py အမှန်တကယ် ရှိမရှိ အရင်ဆုံး သေချာစွာ စစ်ဆေးခြင်း
+          if [ ! -f "main.py" ]; then
+            echo "Error: ပင်မမျက်နှာစာ main.py ဖိုင်အား ရှာမတွေ့ပါ။"
+            exit 1
+          fi
           
-          # ၂။ သင့်ထံမှ main.py အား အဆိုပါ ပတ်ဝန်းကျင်အသစ်တွင်းသို့ ကူးပြောင်းထည့်သွင်းခြင်း
-          cp main.py flet_app_build/main.py
+          # ၂။ Flet မျှော်လင့်ထားသည့် လုပ်ငန်းခွင် Workspace သို့ ဖိုင်များ ပို့ဆောင်ခြင်း
+          mkdir -p src
+          cp main.py src/main.py
           
-          # ၃။ ထို Folder ထဲသို့ ဝင်ရောက်ပြီးမှ APK အား စနစ်တကျ ဆောက်လုပ်ခြင်း
-          cd flet_app_build
-          yes | flet build apk main.py
+          # ၃။ Flet တရားဝင် CLI စနစ်အား သုံး၍ လက်ရှိ Folder အား Target ထားကာ ဆောက်လုပ်ခြင်း
+          # --no-interactive နှင့် yes | အား ပေါင်းစပ်၍ အလိုအလျောက် ဒေါင်းလုဒ်စနစ်အား အသက်သွင်းထားသည်
+          yes | flet build apk src --no-interactive
 
-      - name: Upload Finished APK
+      - name: Upload Finished Android APK
         uses: actions/upload-artifact@v4
         with:
           name: Ruijie-Bypass-APK
-          path: flet_app_build/build/apk/*.apk
+          # Flet ၏ တရားဝင် ထွက်ရှိလာမည့် Native Output လမ်းကြောင်း ဖြစ်သည်
+          path: build/apk/*.apk
