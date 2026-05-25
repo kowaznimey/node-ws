@@ -29,7 +29,7 @@ jobs:
         run: |
           yes | flutter doctor --android-licenses || true
 
-      - name: Production Environment Pip Setup
+      - name: Install Flet CLI
         run: |
           python -m pip install --upgrade pip
           pip install flet
@@ -39,7 +39,14 @@ jobs:
           mkdir -p src
           cp main.py src/main.py
           
-          # Error တက်စေသော --no-interactive အား ဖြုတ်ချပြီး သန့်ရှင်းစွာ build ခြင်း
+          # AndroidManifest တွင် ကွန်ရက်အသုံးပြုခွင့် (Internet Permission) တိုက်ရိုက်ထည့်သွင်းခြင်း
+          mkdir -p src/android/app/src/main
+          echo '<?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+          </manifest>' > src/android/app/src/main/AndroidManifest.xml
+
           yes | flet build apk src
 
       - name: Export Verified Distribution APK
