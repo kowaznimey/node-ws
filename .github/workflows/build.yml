@@ -1,21 +1,41 @@
-name: Build Android APK
+name: Build Flet Android APK
 on:
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Build APK with Buildozer
+
+      - name: Install Flutter & Android SDK dependencies
         run: |
-          pip install buildozer cython
           sudo apt update
-          sudo apt install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake
-          yes | buildozer -v android debug
-      - uses: actions/upload-artifact@v4
+          sudo apt install -y curl git unzip xz-utils zip libglu1-mesa openjdk-17-jdk
+          
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install Flet and Packages
+        run: |
+          pip install --upgrade pip
+          pip install flet aiohttp requests charset-normalizer idna urllib3
+
+      - name: Build Android APK using Flet
+        run: |
+          # Flet ၏ တရားဝင် Build Engine ကို အသုံးပြု၍ APK ဆောက်ခြင်း
+          flet build apk main.py --project-name "Ruijie_Bypass_Controller" --org "org.bypass"
+
+      - name: Upload Finished APK
+        uses: actions/upload-artifact@v4
         with:
           name: Ruijie-Bypass-APK
-          path: bin/*.apk
+          path: build/apk/*.apk
