@@ -36,12 +36,11 @@ jobs:
 
       - name: Compiling and Assembly Production APK
         run: |
-          # သန့်စင်သော Workspace တည်ဆောက်ခြင်း
           mkdir -p src
           cp main.py src/main.py
           
-          # Android Runtime တွင် ပျက်ကျမှုမရှိစေရန် အခွံသစ်ဖြင့် စနစ်တကျ Build ခြင်း
-          flet build apk src --no-interactive
+          # Error တက်စေသော --no-interactive အား ဖြုတ်ချပြီး သန့်ရှင်းစွာ build ခြင်း
+          yes | flet build apk src
 
       - name: Export Verified Distribution APK
         uses: actions/upload-artifact@v4
