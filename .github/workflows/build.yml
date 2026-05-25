@@ -41,15 +41,18 @@ jobs:
             exit 1
           fi
           
-          # Flet Workspace တည်ဆောက်ခြင်း
           mkdir -p src
           cp main.py src/main.py
           
-          # Error တက်စေသော --no-interactive အား ဖြုတ်ချပြီး အရှင်းဆုံးပုံစံဖြင့် build ခြင်း
           yes | flet build apk src
 
       - name: Upload Finished Android APK
         uses: actions/upload-artifact@v4
         with:
           name: Ruijie-Bypass-APK
-          path: build/apk/*.apk
+          # နေရာလွဲမှားမှုမရှိစေရန် ထွက်လာနိုင်သမျှသော APK ဖိုင်လမ်းကြောင်းအားလုံးကို သိမ်းကျုံးရှာဖွေခိုင်းခြင်း ဖြစ်သည်
+          path: |
+            build/**/*.apk
+            dist/**/*.apk
+            src/build/**/*.apk
+            **/apk/*.apk
