@@ -27,13 +27,12 @@ jobs:
       - name: Install Flet and Packages
         run: |
           pip install --upgrade pip
-          # Flet ဗားရှင်းအသစ်ကို တိုက်ရိုက်သွင်းပြီး Build Tools များကို အဆင့်မြှင့်ခြင်း
           pip install flet aiohttp requests charset-normalizer idna urllib3
 
       - name: Build Android APK using Flet
         run: |
-          # --project-name အစား နောက်ဆုံးပေါ် --name သတ်မှတ်ချက်ကို ပြောင်းလဲအသုံးပြုထားပါသည်
-          flet build apk main.py --name "RuijieBypass" --org "org.bypass"
+          # ဗားရှင်းဟောင်းနှင့် ကိုက်ညီစေရန် Error တက်စေမည့် Argument အပိုများအားလုံးကို ဖြုတ်ချထားပါသည်
+          flet build apk main.py
 
       - name: Upload Finished APK
         uses: actions/upload-artifact@v4
