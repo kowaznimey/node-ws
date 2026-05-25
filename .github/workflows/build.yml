@@ -33,29 +33,20 @@ jobs:
           pip install --upgrade pip
           pip install flet aiohttp requests charset-normalizer idna urllib3
 
-      - name: Smart Search and Build APK
+      - name: Init Flet App Structure and Build APK
         run: |
-          # လက်ရှိပရောဂျက်ထဲတွင် main.py ရှိမရှိ အရင်စစ်ဆေးသည်
-          if [ ! -f "main.py" ]; then
-            echo "main.py မတွေ့ရှိပါ။ အခြား Python ဖိုင်များကို လိုက်လံရှာဖွေနေပါသည်..."
-            
-            # Repository ထဲတွင် ရှိနေသော ပထမဆုံး .py ဖိုင်ကို ရှာဖွေပြီး main.py ဟု အမည်ပြောင်းလဲခြင်း
-            TARGET_PY=$(find . -maxdepth 1 -name "*.py" | head -n 1)
-            
-            if [ -n "$TARGET_PY" ]; then
-              echo "တွေ့ရှိထားသော ဖိုင်အမည်: $TARGET_PY အား main.py သို့ လဲလှယ်နေပါသည်..."
-              mv "$TARGET_PY" main.py
-            else
-              echo "Error: မည်သည့် Python (.py) ဖိုင်မျှ ရှာမတွေ့ပါ။"
-              exit 1
-            fi
-          fi
+          # ၁။ Flet စနစ် မျှော်လင့်ထားသည့် လုပ်ငန်းခွင် ပတ်ဝန်းကျင်တစ်ခုအား တည်ဆောက်ခြင်း
+          mkdir -p flet_app_build
           
-          # အဆင်သင့်ဖြစ်ပါက စတင် Build ခြင်း
+          # ၂။ သင့်ထံမှ main.py အား အဆိုပါ ပတ်ဝန်းကျင်အသစ်တွင်းသို့ ကူးပြောင်းထည့်သွင်းခြင်း
+          cp main.py flet_app_build/main.py
+          
+          # ၃။ ထို Folder ထဲသို့ ဝင်ရောက်ပြီးမှ APK အား စနစ်တကျ ဆောက်လုပ်ခြင်း
+          cd flet_app_build
           yes | flet build apk main.py
-          
+
       - name: Upload Finished APK
         uses: actions/upload-artifact@v4
         with:
           name: Ruijie-Bypass-APK
-          path: build/apk/*.apk
+          path: flet_app_build/build/apk/*.apk
